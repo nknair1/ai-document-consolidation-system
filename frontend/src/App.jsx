@@ -497,7 +497,7 @@ export default function App() {
                           <td className="px-6 py-4">{row.department || '-'}</td>
                           <td className="px-6 py-4">{row.joining_date || '-'}</td>
                           <td className="px-6 py-4">{row.exit_date || '-'}</td>
-                          <td className="px-6 py-4 max-w-xs truncate" title={row.exit_reason}>
+                          <td className="px-6 py-4 text-sm text-slate-600 break-words min-w-[200px]" title={row.exit_reason}>
                             {row.exit_reason || '-'}
                           </td>
                           <td className="px-6 py-4">{row.salary != null ? `$${row.salary.toLocaleString()}` : '-'}</td>
