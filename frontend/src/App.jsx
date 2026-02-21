@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
-import { UploadCloud, File, X, CheckCircle, Users, UserMinus, Download, Database } from "lucide-react";
+import { UploadCloud, File, X, CheckCircle, Users, UserMinus, Download, Database, Search, Pencil, Trash2, ChevronLeft, ChevronRight, MessageSquare, Loader2, Send, XCircle, Bot } from "lucide-react";
 import axios from "axios";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Toaster, toast } from "react-hot-toast";
@@ -10,6 +10,15 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [dashboardData, setDashboardData] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage] = useState(5);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatQuestion, setChatQuestion] = useState("");
+  const [chatResponse, setChatResponse] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
 
   const fetchDashboardData = async () => {
     try {
@@ -83,9 +92,65 @@ export default function App() {
     window.open("http://localhost:8000/export", "_blank");
   };
 
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this record?")) return;
+    try {
+      await axios.delete(`http://localhost:8000/api/churn-data/${id}`);
+      toast.success("Record deleted successfully");
+      fetchDashboardData();
+    } catch (error) {
+      toast.error("Failed to delete record");
+    }
+  };
+
+  const handleUpdate = async (id, data) => {
+    try {
+      await axios.put(`http://localhost:8000/api/churn-data/${id}`, data);
+      toast.success("Record updated successfully");
+      setEditingId(null);
+      setEditForm({});
+      fetchDashboardData();
+    } catch (error) {
+      toast.error("Failed to update record");
+    }
+  };
+
+  const startEditing = (row) => {
+    setEditingId(row.id);
+    setEditForm({
+      employee_id: row.employee_id || "",
+      department: row.department || "",
+      exit_reason: row.exit_reason || "",
+      salary: row.salary || ""
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditForm({});
+  };
+
+  const handleChat = async () => {
+    if (!chatQuestion.trim()) return;
+    setIsChatLoading(true);
+    setChatResponse("");
+    try {
+      const response = await axios.post("http://localhost:8000/api/chat", {
+        question: chatQuestion,
+        data: dashboardData
+      });
+      setChatResponse(response.data.response);
+    } catch (error) {
+      toast.error("Failed to get AI response");
+      setChatResponse("An error occurred while processing your question.");
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
   const totalEmployees = dashboardData.length;
   const totalChurn = dashboardData.filter(d => d.churn_flag).length;
-  
+
   const churnByDepartment = dashboardData.reduce((acc, curr) => {
     const dept = curr.department || "Unknown";
     if (!acc[dept]) {
@@ -100,6 +165,22 @@ export default function App() {
   }, {});
 
   const chartData = Object.values(churnByDepartment);
+
+  const filteredData = dashboardData.filter((row) => {
+    const term = searchTerm.toLowerCase();
+    return (
+      (row.employee_id && row.employee_id.toLowerCase().includes(term)) ||
+      (row.department && row.department.toLowerCase().includes(term))
+    );
+  });
+
+  const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const paginatedData = filteredData.slice(startIndex, startIndex + rowsPerPage);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
@@ -306,10 +387,24 @@ export default function App() {
           <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-slate-50/50">
             <h3 className="text-lg font-semibold text-slate-800">Consolidated Records</h3>
             <span className="text-xs font-medium text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-md shadow-sm">
-              {dashboardData.length} records found
+              {filteredData.length} records found
             </span>
           </div>
-          <div className="overflow-x-auto max-h-[500px]">
+
+          <div className="px-6 py-4 border-b border-slate-200">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by Employee ID or Department..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
             <table className="w-full text-sm text-left text-slate-600">
               <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 border-b border-slate-200 shadow-sm z-10">
                 <tr>
@@ -318,36 +413,130 @@ export default function App() {
                   <th className="px-6 py-4 font-semibold whitespace-nowrap">Joining Date</th>
                   <th className="px-6 py-4 font-semibold whitespace-nowrap">Exit Date</th>
                   <th className="px-6 py-4 font-semibold whitespace-nowrap">Exit Reason</th>
+                  <th className="px-6 py-4 font-semibold whitespace-nowrap">Salary</th>
                   <th className="px-6 py-4 font-semibold whitespace-nowrap">Status</th>
+                  <th className="px-6 py-4 font-semibold whitespace-nowrap text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {dashboardData.length > 0 ? (
-                  dashboardData.map((row, index) => (
-                    <tr key={index} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-6 py-4 font-medium text-slate-900">{row.employee_id}</td>
-                      <td className="px-6 py-4">{row.department || '-'}</td>
-                      <td className="px-6 py-4">{row.joining_date || '-'}</td>
-                      <td className="px-6 py-4">{row.exit_date || '-'}</td>
-                      <td className="px-6 py-4 max-w-xs truncate" title={row.exit_reason}>
-                        {row.exit_reason || '-'}
-                      </td>
-                      <td className="px-6 py-4">
-                        {row.churn_flag ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                            Churned
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            Active
-                          </span>
-                        )}
-                      </td>
+                {paginatedData.length > 0 ? (
+                  paginatedData.map((row) => (
+                    <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
+                      {editingId === row.id ? (
+                        <>
+                          <td className="px-6 py-4">
+                            <input
+                              type="text"
+                              value={editForm.employee_id}
+                              onChange={(e) => setEditForm({ ...editForm, employee_id: e.target.value })}
+                              className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </td>
+                          <td className="px-6 py-4">
+                            <input
+                              type="text"
+                              value={editForm.department}
+                              onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                              className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </td>
+                          <td className="px-6 py-4">{row.joining_date || '-'}</td>
+                          <td className="px-6 py-4">{row.exit_date || '-'}</td>
+                          <td className="px-6 py-4">
+                            <input
+                              type="text"
+                              value={editForm.exit_reason}
+                              onChange={(e) => setEditForm({ ...editForm, exit_reason: e.target.value })}
+                              className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </td>
+                          <td className="px-6 py-4">
+                            <input
+                              type="number"
+                              value={editForm.salary}
+                              onChange={(e) => setEditForm({ ...editForm, salary: e.target.value })}
+                              className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </td>
+                          <td className="px-6 py-4">
+                            {row.churn_flag ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                Churned
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Active
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center space-x-2">
+                              <button
+                                onClick={() => handleUpdate(row.id, {
+                                  employee_id: editForm.employee_id || null,
+                                  department: editForm.department || null,
+                                  exit_reason: editForm.exit_reason || null,
+                                  salary: editForm.salary ? parseFloat(editForm.salary) : null
+                                })}
+                                className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={cancelEditing}
+                                className="px-3 py-1 bg-slate-200 text-slate-700 text-xs font-medium rounded hover:bg-slate-300 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-6 py-4 font-medium text-slate-900">{row.employee_id}</td>
+                          <td className="px-6 py-4">{row.department || '-'}</td>
+                          <td className="px-6 py-4">{row.joining_date || '-'}</td>
+                          <td className="px-6 py-4">{row.exit_date || '-'}</td>
+                          <td className="px-6 py-4 max-w-xs truncate" title={row.exit_reason}>
+                            {row.exit_reason || '-'}
+                          </td>
+                          <td className="px-6 py-4">{row.salary != null ? `$${row.salary.toLocaleString()}` : '-'}</td>
+                          <td className="px-6 py-4">
+                            {row.churn_flag ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                Churned
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Active
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center space-x-3">
+                              <button
+                                onClick={() => startEditing(row)}
+                                className="text-slate-400 hover:text-blue-600 transition-colors"
+                                title="Edit"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(row.id)}
+                                className="text-slate-400 hover:text-red-600 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan="8" className="px-6 py-12 text-center text-slate-500">
                       No records available in the database.
                     </td>
                   </tr>
@@ -355,8 +544,120 @@ export default function App() {
               </tbody>
             </table>
           </div>
+
+          {filteredData.length > 0 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50/50">
+              <p className="text-sm text-slate-600">
+                Showing {startIndex + 1} to {Math.min(startIndex + rowsPerPage, filteredData.length)} of {filteredData.length} records
+              </p>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="flex items-center px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-md hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  Previous
+                </button>
+                <span className="text-sm font-medium text-slate-700 px-3">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="flex items-center px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-md hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </main>
+
+      <button
+        onClick={() => setIsChatOpen(true)}
+        className="fixed bottom-8 right-8 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 z-50"
+      >
+        <MessageSquare className="w-6 h-6" />
+      </button>
+
+      {isChatOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+            onClick={() => setIsChatOpen(false)}
+          />
+          <div className="relative w-full max-w-[33vw] bg-white shadow-2xl flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-600 to-indigo-600">
+              <div className="flex items-center space-x-3">
+                <div className="bg-white/20 p-2 rounded-lg">
+                  <Bot className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white">HR AI Assistant</h3>
+                  <p className="text-xs text-blue-100">Powered by Llama 3.1</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="text-white/80 hover:text-white transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
+                <p className="text-sm text-blue-800 font-medium">Welcome! Ask me anything about your employee churn data.</p>
+                <p className="text-xs text-blue-600 mt-1">I can analyze trends, identify patterns, and provide HR insights based on your uploaded records.</p>
+              </div>
+
+              {isChatLoading && (
+                <div className="flex items-center justify-center py-8">
+                  <div className="flex flex-col items-center space-y-3">
+                    <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                    <p className="text-sm text-slate-500 font-medium">Analyzing your data...</p>
+                  </div>
+                </div>
+              )}
+
+              {chatResponse && !isChatLoading && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-5">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Bot className="w-4 h-4 text-indigo-600" />
+                    <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">AI Response</span>
+                  </div>
+                  <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{chatResponse}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-slate-200 p-4 bg-slate-50">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={chatQuestion}
+                  onChange={(e) => setChatQuestion(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleChat(); }}
+                  placeholder="Ask about your HR data..."
+                  className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  disabled={isChatLoading}
+                />
+                <button
+                  onClick={handleChat}
+                  disabled={isChatLoading || !chatQuestion.trim()}
+                  className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-sm font-medium"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Ask</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
