@@ -110,7 +110,7 @@ export default function App() {
             <Database className="w-5 h-5 text-white" />
           </div>
           <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700">
-            Digitech HR Intelligence
+            Sample HR Intelligence
           </span>
         </div>
         <div className="flex items-center space-x-4">
