@@ -31,7 +31,7 @@ export default function App() {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await axios.get("http://localhost:8000/api/churn-data");
+      const response = await axios.get("https://nknair-hr-intelligence-backend.hf.space/api/churn-data");
       setDashboardData(response.data);
     } catch (error) {
       toast.error("Failed to fetch dashboard data");
@@ -75,7 +75,7 @@ export default function App() {
     });
 
     try {
-      await axios.post("http://localhost:8000/upload", formData, {
+      await axios.post("https://nknair-hr-intelligence-backend.hf.space/upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data"
         },
@@ -98,13 +98,13 @@ export default function App() {
   };
 
   const handleExport = () => {
-    window.open("http://localhost:8000/export", "_blank");
+    window.open("https://nknair-hr-intelligence-backend.hf.space/export", "_blank");
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this record?")) return;
     try {
-      await axios.delete(`http://localhost:8000/api/churn-data/${id}`);
+      await axios.delete(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`);
       toast.success("Record deleted successfully");
       fetchDashboardData();
     } catch (error) {
@@ -114,7 +114,7 @@ export default function App() {
 
   const handleUpdate = async (id, data) => {
     try {
-      await axios.put(`http://localhost:8000/api/churn-data/${id}`, data);
+      await axios.put(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`, data);
       toast.success("Record updated successfully");
       setEditingId(null);
       setEditForm({});
@@ -144,7 +144,7 @@ export default function App() {
     setIsChatLoading(true);
     setChatResponse("");
     try {
-      const response = await axios.post("http://localhost:8000/api/chat", {
+      const response = await axios.post("https://nknair-hr-intelligence-backend.hf.space/api/chat", {
         question: chatQuestion,
         data: dashboardData
       });
