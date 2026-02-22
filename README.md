@@ -1,7 +1,7 @@
 # Full Stack AI Document Consolidation System
 
 ### 🚀 Live Demo
-* **Frontend Application:** [Nexus HR Analytics on Vercel](https://ai-document-consolidation-system.vercel.app/)
+* **Frontend Application:** [HR Analytics on Vercel](https://ai-document-consolidation-system.vercel.app/)
 * **Backend API Hub:** Hosted on Hugging Face Spaces (Docker/FastAPI)
 * **Database:** Supabase (PostgreSQL)
 
