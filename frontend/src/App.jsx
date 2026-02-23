@@ -26,7 +26,7 @@ export default function App() {
   const [chatQuestion, setChatQuestion] = useState("");
   const [chatResponse, setChatResponse] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [selectedIds, setSelectedIds] = useState([]);
 
   useEffect(() => {
