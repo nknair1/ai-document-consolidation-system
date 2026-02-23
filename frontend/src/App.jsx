@@ -440,6 +440,7 @@ export default function App() {
                   <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Exit Date</th>
                   <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Exit Reason</th>
                   <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Salary</th>
+                  <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Performance Rating</th>
                   <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Status</th>
                   <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap text-center">Actions</th>
                 </tr>
@@ -484,6 +485,7 @@ export default function App() {
                               className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
                             />
                           </td>
+                          <td className="px-4 sm:px-6 py-4 text-slate-600 dark:text-slate-400">{row.last_performance_rating != null ? row.last_performance_rating : '-'}</td>
                           <td className="px-4 sm:px-6 py-4">
                             {row.churn_flag ? (
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300">
@@ -527,6 +529,7 @@ export default function App() {
                             {row.exit_reason || '-'}
                           </td>
                           <td className="px-4 sm:px-6 py-4">{row.salary != null ? `$${row.salary.toLocaleString()}` : '-'}</td>
+                          <td className="px-4 sm:px-6 py-4">{row.last_performance_rating != null ? row.last_performance_rating : '-'}</td>
                           <td className="px-4 sm:px-6 py-4">
                             {row.churn_flag ? (
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300">
@@ -562,7 +565,7 @@ export default function App() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="8" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                    <td colSpan="9" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
                       No records available in the database.
                     </td>
                   </tr>
