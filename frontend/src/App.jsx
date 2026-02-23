@@ -7,7 +7,9 @@ import { Toaster, toast } from "react-hot-toast";
 
 const CHART_COLORS = [
   "#6366f1", "#f43f5e", "#10b981", "#f59e0b", "#3b82f6",
-  "#8b5cf6", "#ec4899", "#14b8a6", "#ef4444", "#06b6d4"
+  "#8b5cf6", "#ec4899", "#14b8a6", "#ef4444", "#06b6d4",
+  "#f58231", "#ffe119", "#bcf60c", "#911eb4", "#46f0f0",
+  "#9a6324", "#800000", "#808000", "#000075", "#aaffc3"
 ];
 
 export default function App() {
