@@ -1,6 +1,11 @@
 # Full Stack AI Document Consolidation System
 
-**Domain: Option 5 - Employee Churn Dataset**
+### 🚀 Live Demo
+* **Frontend Application:** [HR Analytics on Vercel](https://ai-document-consolidation-system.vercel.app/)
+* **Backend API Hub:** Hosted on Hugging Face Spaces (Docker/FastAPI)
+* **Database:** Supabase (PostgreSQL)
+
+**Employee Churn Dataset**
 
 This project is a Full Stack AI-powered Document Consolidation Application. It accepts multiple file formats (PDFs, Excel, CSV, Images), extracts raw text using various OCR tools, normalizes the data into a structured schema using Groq's LLM, and stores it in a PostgreSQL database for reporting and Excel export.
 
