@@ -85,12 +85,12 @@ def extract_text(file_content: bytes, filename: str) -> str:
     return text.strip()
 
 
-def process_with_llm(text: str) -> dict:
+def process_with_llm(text: str) -> list:
     prompt = """
-    You are an expert HR data extractor. 
-    Extract the following structured information from the provided text and return ONLY a raw, valid JSON object matching this schema. Do not include any markdown formatting, explanations, or code blocks. Just the raw JSON.
+    You are an expert HR data extractor.
+    Extract information for ALL employees found in the text. Return ONLY a raw, valid JSON ARRAY of objects ([{...}, {...}]). Do not return a single object.
     
-    Required JSON keys:
+    Each object in the array must match this schema:
     - "employee_id" (string)
     - "joining_date" (string, format YYYY-MM-DD, or null if missing)
     - "exit_date" (string, format YYYY-MM-DD, or null if missing)
@@ -107,7 +107,7 @@ def process_with_llm(text: str) -> dict:
         completion = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": "You output only valid JSON. No markdown."},
+                {"role": "system", "content": "Extract information for ALL employees found in the text. Return ONLY a raw, valid JSON ARRAY of objects ([{...}, {...}]). Do not return a single object."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
@@ -122,11 +122,15 @@ def process_with_llm(text: str) -> dict:
             response_content = response_content[: -3]
 
         parsed_data = json.loads(response_content.strip())
+
+        if isinstance(parsed_data, dict):
+            return [parsed_data]
+
         return parsed_data
 
     except Exception as e:
         print(f"Error processing with LLM: {str(e)}")
-        return {}
+        return []
 
 
 def safe_parse_date(date_str):
@@ -136,6 +140,32 @@ def safe_parse_date(date_str):
         return datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
         return None
+
+
+def safe_parse_salary(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        value = value.strip()
+        if value == "":
+            return None
+        try:
+            return float(value.replace(",", "").replace("$", ""))
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def safe_parse_rating(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        if value == "":
+            return None
+    return str(value)
 
 
 @app.get("/")
@@ -162,30 +192,51 @@ async def upload_files(files: List[UploadFile] = File(...), db: Session = Depend
 
             structured_data = process_with_llm(raw_text)
 
-            if not structured_data.get("employee_id"):
-                raise ValueError("LLM could not extract a valid employee_id")
+            if not structured_data:
+                raise ValueError("LLM could not extract any valid employee data")
 
-            db_record = models.EmployeeChurn(
-                employee_id=str(structured_data.get("employee_id", "UNKNOWN")),
-                joining_date=safe_parse_date(structured_data.get("joining_date")),
-                exit_date=safe_parse_date(structured_data.get("exit_date")),
-                department=structured_data.get("department"),
-                last_performance_rating=structured_data.get("last_performance_rating"),
-                salary=float(structured_data.get("salary")) if structured_data.get("salary") is not None else None,
-                exit_reason=structured_data.get("exit_reason"),
-                churn_flag=bool(structured_data.get("churn_flag", False)),
-                source_file=file.filename,
-                processing_status="COMPLETED"
-            )
+            for emp_data in structured_data:
+                try:
+                    if not emp_data.get("employee_id"):
+                        error_record = models.EmployeeChurn(
+                            employee_id="ERROR",
+                            source_file=file.filename,
+                            processing_status="FAILED",
+                            exit_reason="Missing Employee ID"
+                        )
+                        db.add(error_record)
+                        continue
 
-            db.add(db_record)
+                    db_record = models.EmployeeChurn(
+                        employee_id=str(emp_data.get("employee_id", "UNKNOWN")),
+                        joining_date=safe_parse_date(emp_data.get("joining_date")),
+                        exit_date=safe_parse_date(emp_data.get("exit_date")),
+                        department=emp_data.get("department"),
+                        last_performance_rating=safe_parse_rating(emp_data.get("last_performance_rating")),
+                        salary=safe_parse_salary(emp_data.get("salary")),
+                        exit_reason=emp_data.get("exit_reason"),
+                        churn_flag=bool(emp_data.get("churn_flag", False)),
+                        source_file=file.filename,
+                        processing_status="COMPLETED"
+                    )
+
+                    db.add(db_record)
+
+                except Exception as e:
+                    error_record = models.EmployeeChurn(
+                        employee_id="ERROR",
+                        source_file=file.filename,
+                        processing_status="FAILED",
+                        exit_reason=str(e)[:255]
+                    )
+                    db.add(error_record)
+
             db.commit()
-            db.refresh(db_record)
 
             results.append({
                 "filename": file.filename,
                 "status": "success",
-                "record_id": db_record.id
+                "employees_processed": len(structured_data)
             })
 
         except Exception as e:
