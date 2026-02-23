@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import io
 import pandas as pd
 import pdfplumber
@@ -82,14 +83,17 @@ def extract_text(file_content: bytes, filename: str) -> str:
         print(f"Error extracting text from {filename}: {str(e)}")
         raise
 
+    print('\n--- RAW EXTRACTED TEXT ---')
+    print(text)
     return text.strip()
 
 
 def process_with_llm(text: str) -> list:
     prompt = """
-    You are an expert HR data extractor.
-    Extract information for ALL employees found in the text. Return ONLY a raw, valid JSON ARRAY of objects ([{...}, {...}]). Do not return a single object.
-    
+    You are a senior HR Data Engineer. Your task is to extract a JSON ARRAY of employees from the text. Even if columns are named differently (e.g., "Pay" instead of "Salary" or "Dept" instead of "Department"), map them semantically to our schema.
+
+    Output ONLY a raw JSON array. Start with [ and end with ]. If you see 13-digit numbers like 1673740800000, these are Unix timestamps; convert them to YYYY-MM-DD. If a salary is a string like "Competitive", return null.
+
     Each object in the array must match this schema:
     - "employee_id" (string)
     - "joining_date" (string, format YYYY-MM-DD, or null if missing)
@@ -99,7 +103,7 @@ def process_with_llm(text: str) -> list:
     - "salary" (float, or null if missing, strip any currency symbols and commas)
     - "exit_reason" (string, or null if missing)
     - "churn_flag" (boolean, true if the employee has exited, false otherwise)
-    
+
     Text to process:
     """ + text
 
@@ -107,7 +111,7 @@ def process_with_llm(text: str) -> list:
         completion = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": "Extract information for ALL employees found in the text. Return ONLY a raw, valid JSON ARRAY of objects ([{...}, {...}]). Do not return a single object."},
+                {"role": "system", "content": "You are a senior HR Data Engineer. Your task is to extract a JSON ARRAY of employees from the text. Even if columns are named differently, map them semantically to our schema. Output ONLY a raw JSON array. Start with [ and end with ]. Absolutely no conversational text, notes, or explanations before or after the JSON array."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
@@ -115,11 +119,17 @@ def process_with_llm(text: str) -> list:
         )
 
         response_content = completion.choices[0].message.content.strip()
+        print('\n--- RAW LLM RESPONSE ---')
+        print(response_content)
 
         if response_content.startswith("```json"):
             response_content = response_content.replace("```json", "", 1)
         if response_content.endswith("```"):
             response_content = response_content[: -3]
+
+        match = re.search(r'\[.*\]', response_content, re.DOTALL)
+        if match:
+            response_content = match.group(0)
 
         parsed_data = json.loads(response_content.strip())
 
@@ -129,7 +139,7 @@ def process_with_llm(text: str) -> list:
         return parsed_data
 
     except Exception as e:
-        print(f"Error processing with LLM: {str(e)}")
+        print(f'\n--- JSON PARSE ERROR ---\n{str(e)}')
         return []
 
 
@@ -207,13 +217,18 @@ async def upload_files(files: List[UploadFile] = File(...), db: Session = Depend
                         db.add(error_record)
                         continue
 
+                    try:
+                        salary = float(str(emp_data.get("salary")).replace("$", "").replace(",", ""))
+                    except (ValueError, TypeError):
+                        salary = None
+
                     db_record = models.EmployeeChurn(
                         employee_id=str(emp_data.get("employee_id", "UNKNOWN")),
                         joining_date=safe_parse_date(emp_data.get("joining_date")),
                         exit_date=safe_parse_date(emp_data.get("exit_date")),
                         department=emp_data.get("department"),
                         last_performance_rating=safe_parse_rating(emp_data.get("last_performance_rating")),
-                        salary=safe_parse_salary(emp_data.get("salary")),
+                        salary=salary,
                         exit_reason=emp_data.get("exit_reason"),
                         churn_flag=bool(emp_data.get("churn_flag", False)),
                         source_file=file.filename,
@@ -223,6 +238,7 @@ async def upload_files(files: List[UploadFile] = File(...), db: Session = Depend
                     db.add(db_record)
 
                 except Exception as e:
+                    print(f'\n--- ROW INSERT ERROR ---\n{str(e)}')
                     error_record = models.EmployeeChurn(
                         employee_id="ERROR",
                         source_file=file.filename,
