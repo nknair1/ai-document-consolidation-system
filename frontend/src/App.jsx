@@ -2,8 +2,13 @@ import React, { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { UploadCloud, File, X, CheckCircle, Users, UserMinus, Download, Database, Search, Pencil, Trash2, ChevronLeft, ChevronRight, MessageSquare, Loader2, Send, XCircle, Bot, Moon, Sun } from "lucide-react";
 import axios from "axios";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Toaster, toast } from "react-hot-toast";
+
+const CHART_COLORS = [
+  "#6366f1", "#f43f5e", "#10b981", "#f59e0b", "#3b82f6",
+  "#8b5cf6", "#ec4899", "#14b8a6", "#ef4444", "#06b6d4"
+];
 
 export default function App() {
   const [files, setFiles] = useState([]);
@@ -20,6 +25,7 @@ export default function App() {
   const [chatResponse, setChatResponse] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -28,7 +34,8 @@ export default function App() {
       document.documentElement.classList.remove("dark");
     }
   }, [isDarkMode]);
-
+// http://127.0.0.1:8000
+// https://nknair-hr-intelligence-backend.hf.space
   const fetchDashboardData = async () => {
     try {
       const response = await axios.get("https://nknair-hr-intelligence-backend.hf.space/api/churn-data");
@@ -121,6 +128,20 @@ export default function App() {
       fetchDashboardData();
     } catch (error) {
       toast.error("Failed to update record");
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected records?`)) return;
+    try {
+      for (const id of selectedIds) {
+        await axios.delete(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`);
+      }
+      toast.success(`${selectedIds.length} records deleted successfully`);
+      setSelectedIds([]);
+      fetchDashboardData();
+    } catch (error) {
+      toast.error("Failed to delete some records");
     }
   };
 
@@ -393,8 +414,16 @@ export default function App() {
                         itemStyle={{ fontSize: '13px', fontWeight: 500, color: tooltipLabelColor }}
                         labelStyle={{ color: tooltipLabelColor, fontWeight: 600, marginBottom: '8px' }}
                       />
-                      <Bar dataKey="retained" stackId="a" fill="#6366f1" name="Retained" radius={[0, 0, 4, 4]} maxBarSize={50} />
-                      <Bar dataKey="churned" stackId="a" fill="#f43f5e" name="Churned" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                      <Bar dataKey="retained" stackId="a" name="Retained" radius={[0, 0, 4, 4]} maxBarSize={50}>
+                        {chartData.map((entry, index) => (
+                          <Cell key={`retained-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Bar>
+                      <Bar dataKey="churned" stackId="a" name="Churned" radius={[4, 4, 0, 0]} maxBarSize={50}>
+                        {chartData.map((entry, index) => (
+                          <Cell key={`churned-${index}`} fill={CHART_COLORS[(index + 5) % CHART_COLORS.length]} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -412,9 +441,20 @@ export default function App() {
         <div className="w-full bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 sm:p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 gap-2">
             <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Consolidated Records</h3>
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-2.5 py-1 rounded-md shadow-sm">
-              {filteredData.length} records found
-            </span>
+            <div className="flex items-center space-x-3">
+              {selectedIds.length > 0 && (
+                <button
+                  onClick={handleBatchDelete}
+                  className="flex items-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                  Delete Selected ({selectedIds.length})
+                </button>
+              )}
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-2.5 py-1 rounded-md shadow-sm">
+                {filteredData.length} records found
+              </span>
+            </div>
           </div>
 
           <div className="px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-700">
@@ -434,6 +474,21 @@ export default function App() {
             <table className="w-full text-sm text-left text-slate-600 dark:text-slate-300">
               <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-800/80 sticky top-0 border-b border-slate-200 dark:border-slate-700 shadow-sm z-10">
                 <tr>
+                  <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={paginatedData.length > 0 && paginatedData.every(row => selectedIds.includes(row.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds((prev) => [...new Set([...prev, ...paginatedData.map(row => row.id)])]);
+                        } else {
+                          const pageIds = paginatedData.map(row => row.id);
+                          setSelectedIds((prev) => prev.filter(id => !pageIds.includes(id)));
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
                   <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Employee ID</th>
                   <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Department</th>
                   <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Joining Date</th>
@@ -448,9 +503,23 @@ export default function App() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {paginatedData.length > 0 ? (
                   paginatedData.map((row) => (
-                    <tr key={row.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors">
+                    <tr key={row.id} className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors ${selectedIds.includes(row.id) ? "bg-blue-50/50 dark:bg-blue-900/20" : ""}`}>
                       {editingId === row.id ? (
                         <>
+                          <td className="px-4 sm:px-6 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(row.id)}
+                              onChange={() => {
+                                setSelectedIds((prev) =>
+                                  prev.includes(row.id)
+                                    ? prev.filter((id) => id !== row.id)
+                                    : [...prev, row.id]
+                                );
+                              }}
+                              className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
+                            />
+                          </td>
                           <td className="px-4 sm:px-6 py-4">
                             <input
                               type="text"
@@ -521,6 +590,20 @@ export default function App() {
                         </>
                       ) : (
                         <>
+                          <td className="px-4 sm:px-6 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(row.id)}
+                              onChange={() => {
+                                setSelectedIds((prev) =>
+                                  prev.includes(row.id)
+                                    ? prev.filter((id) => id !== row.id)
+                                    : [...prev, row.id]
+                                );
+                              }}
+                              className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
+                            />
+                          </td>
                           <td className="px-4 sm:px-6 py-4 font-medium text-slate-900 dark:text-white">{row.employee_id}</td>
                           <td className="px-4 sm:px-6 py-4">{row.department || '-'}</td>
                           <td className="px-4 sm:px-6 py-4">{row.joining_date || '-'}</td>
@@ -565,7 +648,7 @@ export default function App() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="9" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                    <td colSpan="10" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
                       No records available in the database.
                     </td>
                   </tr>
