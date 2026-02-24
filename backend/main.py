@@ -47,12 +47,15 @@ class ChatRequest(BaseModel):
 
 
 class UpdateRecord(BaseModel):
-    employee_id: str = None
-    department: str = None
-    exit_reason: str = None
-    salary: float = None
-    validation_status: str = None
-    is_confirmed: bool = None
+    employee_id: Optional[str] = None
+    department: Optional[str] = None
+    joining_date: Optional[str] = None
+    exit_date: Optional[str] = None
+    exit_reason: Optional[str] = None
+    salary: Optional[float] = None
+    last_performance_rating: Optional[str] = None
+    validation_status: Optional[str] = None
+    is_confirmed: Optional[bool] = None
 
 
 def extract_text(file_content: bytes, filename: str) -> str:
@@ -129,7 +132,7 @@ def process_with_llm(text: str) -> list:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
-            max_tokens=1024,
+            max_tokens=8192,
         )
 
         response_content = completion.choices[0].message.content.strip()
@@ -155,6 +158,67 @@ def process_with_llm(text: str) -> list:
     except Exception as e:
         print(f'\n--- JSON PARSE ERROR ---\n{str(e)}')
         return []
+
+
+def fill_missing_ids(data):
+    id_pattern = re.compile(r'^(.*?)(\d+)$')
+
+    known = {}
+    for i, row in enumerate(data):
+        eid = row.get("employee_id")
+        if eid:
+            m = id_pattern.match(eid)
+            if m:
+                known[i] = (m.group(1), int(m.group(2)))
+
+    for i, row in enumerate(data):
+        eid = row.get("employee_id")
+        if eid and row.get("validation_status") not in [None, "error"]:
+            continue
+        if eid and row.get("validation_status") != "error":
+            continue
+
+        prefix = None
+        guessed_num = None
+
+        before = None
+        after = None
+        for b in range(i - 1, -1, -1):
+            if b in known:
+                before = (b, known[b])
+                break
+        for a in range(i + 1, len(data)):
+            if a in known:
+                after = (a, known[a])
+                break
+
+        if before and after:
+            b_idx, (b_prefix, b_num) = before
+            a_idx, (a_prefix, a_num) = after
+            if b_prefix == a_prefix:
+                expected = b_num + (i - b_idx)
+                if expected == a_num - (a_idx - i):
+                    prefix = b_prefix
+                    guessed_num = expected
+        elif before:
+            b_idx, (b_prefix, b_num) = before
+            prefix = b_prefix
+            guessed_num = b_num + (i - b_idx)
+        elif after:
+            a_idx, (a_prefix, a_num) = after
+            prefix = a_prefix
+            guessed_num = a_num - (a_idx - i)
+
+        if prefix is not None and guessed_num is not None:
+            row["employee_id"] = f"{prefix}{guessed_num}"
+            row["validation_status"] = "guess"
+            print(f'--- PROGRAMMATIC GUESS --- index {i} -> {row["employee_id"]}')
+        else:
+            if not row.get("employee_id"):
+                row["employee_id"] = None
+                row["validation_status"] = "error"
+
+    return data
 
 
 def safe_parse_date(date_str):
@@ -218,6 +282,8 @@ async def upload_files(files: List[UploadFile] = File(...), db: Session = Depend
 
             if not structured_data:
                 raise ValueError("LLM could not extract any valid employee data")
+
+            structured_data = fill_missing_ids(structured_data)
 
             for emp_data in structured_data:
                 try:
@@ -363,10 +429,16 @@ def update_churn_record(record_id: int, update_data: UpdateRecord, db: Session =
         record.employee_id = update_data.employee_id
     if update_data.department is not None:
         record.department = update_data.department
+    if update_data.joining_date is not None:
+        record.joining_date = safe_parse_date(update_data.joining_date)
+    if update_data.exit_date is not None:
+        record.exit_date = safe_parse_date(update_data.exit_date)
     if update_data.exit_reason is not None:
         record.exit_reason = update_data.exit_reason
     if update_data.salary is not None:
         record.salary = update_data.salary
+    if update_data.last_performance_rating is not None:
+        record.last_performance_rating = update_data.last_performance_rating
     if update_data.validation_status is not None:
         record.validation_status = update_data.validation_status
     if update_data.is_confirmed is not None:

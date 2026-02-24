@@ -42,7 +42,7 @@ export default function App() {
 // https://nknair-hr-intelligence-backend.hf.space
   const fetchDashboardData = async () => {
     try {
-      const response = await axios.get("https://nknair-hr-intelligence-backend.hf.space/api/churn-data");
+      const response = await axios.get("http://127.0.0.1:8000/api/churn-data");
       setDashboardData(response.data);
     } catch (error) {
       toast.error("Failed to fetch dashboard data");
@@ -86,7 +86,7 @@ export default function App() {
     });
 
     try {
-      await axios.post("https://nknair-hr-intelligence-backend.hf.space/upload", formData, {
+      await axios.post("http://127.0.0.1:8000/upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data"
         },
@@ -109,13 +109,13 @@ export default function App() {
   };
 
   const handleExport = () => {
-    window.open("https://nknair-hr-intelligence-backend.hf.space/export", "_blank");
+    window.open("http://127.0.0.1:8000/export", "_blank");
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this record?")) return;
     try {
-      await axios.delete(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`);
+      await axios.delete(`http://127.0.0.1:8000/api/churn-data/${id}`);
       toast.success("Record deleted successfully");
       fetchDashboardData();
     } catch (error) {
@@ -125,7 +125,7 @@ export default function App() {
 
   const handleUpdate = async (id, data) => {
     try {
-      await axios.put(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`, data);
+      await axios.put(`http://127.0.0.1:8000/api/churn-data/${id}`, data);
       toast.success("Record updated successfully");
       setEditingId(null);
       setEditForm({});
@@ -139,7 +139,7 @@ export default function App() {
     if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected records?`)) return;
     try {
       for (const id of selectedIds) {
-        await axios.delete(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`);
+        await axios.delete(`http://127.0.0.1:8000/api/churn-data/${id}`);
       }
       toast.success(`${selectedIds.length} records deleted successfully`);
       setSelectedIds([]);
@@ -158,7 +158,7 @@ export default function App() {
       payload.employee_id = editedEmployeeId.trim();
     }
     try {
-      await axios.put(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`, payload);
+      await axios.put(`http://127.0.0.1:8000/api/churn-data/${id}`, payload);
       toast.success("Record confirmed successfully");
       setReviewEditId(null);
       setReviewEditValue("");
@@ -173,8 +173,11 @@ export default function App() {
     setEditForm({
       employee_id: row.employee_id || "",
       department: row.department || "",
+      joining_date: row.joining_date || "",
+      exit_date: row.exit_date || "",
       exit_reason: row.exit_reason || "",
-      salary: row.salary || ""
+      salary: row.salary != null ? row.salary : "",
+      last_performance_rating: row.last_performance_rating || ""
     });
   };
 
@@ -188,7 +191,7 @@ export default function App() {
     setIsChatLoading(true);
     setChatResponse("");
     try {
-      const response = await axios.post("https://nknair-hr-intelligence-backend.hf.space/api/chat", {
+      const response = await axios.post("http://127.0.0.1:8000/api/chat", {
         question: chatQuestion,
         data: dashboardData
       });
@@ -735,8 +738,22 @@ export default function App() {
                               className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
                             />
                           </td>
-                          <td className="px-4 sm:px-6 py-4 text-slate-600 dark:text-slate-400">{row.joining_date || '-'}</td>
-                          <td className="px-4 sm:px-6 py-4 text-slate-600 dark:text-slate-400">{row.exit_date || '-'}</td>
+                          <td className="px-4 sm:px-6 py-4">
+                            <input
+                              type="date"
+                              value={editForm.joining_date}
+                              onChange={(e) => setEditForm({ ...editForm, joining_date: e.target.value })}
+                              className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                            />
+                          </td>
+                          <td className="px-4 sm:px-6 py-4">
+                            <input
+                              type="date"
+                              value={editForm.exit_date}
+                              onChange={(e) => setEditForm({ ...editForm, exit_date: e.target.value })}
+                              className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                            />
+                          </td>
                           <td className="px-4 sm:px-6 py-4">
                             <input
                               type="text"
@@ -753,7 +770,14 @@ export default function App() {
                               className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
                             />
                           </td>
-                          <td className="px-4 sm:px-6 py-4 text-slate-600 dark:text-slate-400">{row.last_performance_rating != null ? row.last_performance_rating : '-'}</td>
+                          <td className="px-4 sm:px-6 py-4">
+                            <input
+                              type="text"
+                              value={editForm.last_performance_rating}
+                              onChange={(e) => setEditForm({ ...editForm, last_performance_rating: e.target.value })}
+                              className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                            />
+                          </td>
                           <td className="px-4 sm:px-6 py-4">
                             {row.churn_flag ? (
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300">
@@ -768,12 +792,18 @@ export default function App() {
                           <td className="px-4 sm:px-6 py-4">
                             <div className="flex items-center justify-center space-x-2">
                               <button
-                                onClick={() => handleUpdate(row.id, {
+                                onClick={() => {
+                                const salaryVal = editForm.salary !== "" ? parseFloat(editForm.salary) : null;
+                                handleUpdate(row.id, {
                                   employee_id: editForm.employee_id || null,
                                   department: editForm.department || null,
+                                  joining_date: editForm.joining_date || null,
+                                  exit_date: editForm.exit_date || null,
                                   exit_reason: editForm.exit_reason || null,
-                                  salary: editForm.salary ? parseFloat(editForm.salary) : null
-                                })}
+                                  salary: salaryVal !== null && !isNaN(salaryVal) ? salaryVal : null,
+                                  last_performance_rating: editForm.last_performance_rating || null
+                                });
+                              }}
                                 className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
                               >
                                 Save
