@@ -42,7 +42,7 @@ export default function App() {
 // https://nknair-hr-intelligence-backend.hf.space
   const fetchDashboardData = async () => {
     try {
-      const response = await axios.get("http://127.0.0.1:8000/api/churn-data");
+      const response = await axios.get("https://nknair-hr-intelligence-backend.hf.space/api/churn-data");
       setDashboardData(response.data);
     } catch (error) {
       toast.error("Failed to fetch dashboard data");
@@ -86,7 +86,7 @@ export default function App() {
     });
 
     try {
-      await axios.post("http://127.0.0.1:8000/upload", formData, {
+      await axios.post("https://nknair-hr-intelligence-backend.hf.space/upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data"
         },
@@ -109,13 +109,13 @@ export default function App() {
   };
 
   const handleExport = () => {
-    window.open("http://127.0.0.1:8000/export", "_blank");
+    window.open("https://nknair-hr-intelligence-backend.hf.space/export", "_blank");
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this record?")) return;
     try {
-      await axios.delete(`http://127.0.0.1:8000/api/churn-data/${id}`);
+      await axios.delete(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`);
       toast.success("Record deleted successfully");
       fetchDashboardData();
     } catch (error) {
@@ -125,7 +125,7 @@ export default function App() {
 
   const handleUpdate = async (id, data) => {
     try {
-      await axios.put(`http://127.0.0.1:8000/api/churn-data/${id}`, data);
+      await axios.put(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`, data);
       toast.success("Record updated successfully");
       setEditingId(null);
       setEditForm({});
@@ -139,7 +139,7 @@ export default function App() {
     if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected records?`)) return;
     try {
       for (const id of selectedIds) {
-        await axios.delete(`http://127.0.0.1:8000/api/churn-data/${id}`);
+        await axios.delete(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`);
       }
       toast.success(`${selectedIds.length} records deleted successfully`);
       setSelectedIds([]);
@@ -158,7 +158,7 @@ export default function App() {
       payload.employee_id = editedEmployeeId.trim();
     }
     try {
-      await axios.put(`http://127.0.0.1:8000/api/churn-data/${id}`, payload);
+      await axios.put(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`, payload);
       toast.success("Record confirmed successfully");
       setReviewEditId(null);
       setReviewEditValue("");
@@ -188,7 +188,7 @@ export default function App() {
     setIsChatLoading(true);
     setChatResponse("");
     try {
-      const response = await axios.post("http://127.0.0.1:8000/api/chat", {
+      const response = await axios.post("https://nknair-hr-intelligence-backend.hf.space/api/chat", {
         question: chatQuestion,
         data: dashboardData
       });
