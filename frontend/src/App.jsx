@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
-import { UploadCloud, File, X, CheckCircle, Users, UserMinus, Download, Database, Search, Pencil, Trash2, ChevronLeft, ChevronRight, MessageSquare, Loader2, Send, XCircle, Bot, Moon, Sun } from "lucide-react";
+import { UploadCloud, File, X, CheckCircle, Users, UserMinus, Download, Database, Search, Pencil, Trash2, ChevronLeft, ChevronRight, MessageSquare, Loader2, Send, XCircle, Bot, Moon, Sun, AlertTriangle } from "lucide-react";
 import axios from "axios";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Toaster, toast } from "react-hot-toast";
@@ -28,6 +28,8 @@ export default function App() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [reviewEditId, setReviewEditId] = useState(null);
+  const [reviewEditValue, setReviewEditValue] = useState("");
 
   useEffect(() => {
     if (isDarkMode) {
@@ -40,7 +42,7 @@ export default function App() {
 // https://nknair-hr-intelligence-backend.hf.space
   const fetchDashboardData = async () => {
     try {
-      const response = await axios.get("https://nknair-hr-intelligence-backend.hf.space/api/churn-data");
+      const response = await axios.get("http://127.0.0.1:8000/api/churn-data");
       setDashboardData(response.data);
     } catch (error) {
       toast.error("Failed to fetch dashboard data");
@@ -84,7 +86,7 @@ export default function App() {
     });
 
     try {
-      await axios.post("https://nknair-hr-intelligence-backend.hf.space/upload", formData, {
+      await axios.post("http://127.0.0.1:8000/upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data"
         },
@@ -107,13 +109,13 @@ export default function App() {
   };
 
   const handleExport = () => {
-    window.open("https://nknair-hr-intelligence-backend.hf.space/export", "_blank");
+    window.open("http://127.0.0.1:8000/export", "_blank");
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this record?")) return;
     try {
-      await axios.delete(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`);
+      await axios.delete(`http://127.0.0.1:8000/api/churn-data/${id}`);
       toast.success("Record deleted successfully");
       fetchDashboardData();
     } catch (error) {
@@ -123,7 +125,7 @@ export default function App() {
 
   const handleUpdate = async (id, data) => {
     try {
-      await axios.put(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`, data);
+      await axios.put(`http://127.0.0.1:8000/api/churn-data/${id}`, data);
       toast.success("Record updated successfully");
       setEditingId(null);
       setEditForm({});
@@ -137,13 +139,32 @@ export default function App() {
     if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected records?`)) return;
     try {
       for (const id of selectedIds) {
-        await axios.delete(`https://nknair-hr-intelligence-backend.hf.space/api/churn-data/${id}`);
+        await axios.delete(`http://127.0.0.1:8000/api/churn-data/${id}`);
       }
       toast.success(`${selectedIds.length} records deleted successfully`);
       setSelectedIds([]);
       fetchDashboardData();
     } catch (error) {
       toast.error("Failed to delete some records");
+    }
+  };
+
+  const handleConfirmRecord = async (id, editedEmployeeId) => {
+    const payload = {
+      is_confirmed: true,
+      validation_status: "verified"
+    };
+    if (editedEmployeeId && editedEmployeeId.trim() !== "") {
+      payload.employee_id = editedEmployeeId.trim();
+    }
+    try {
+      await axios.put(`http://127.0.0.1:8000/api/churn-data/${id}`, payload);
+      toast.success("Record confirmed successfully");
+      setReviewEditId(null);
+      setReviewEditValue("");
+      fetchDashboardData();
+    } catch (error) {
+      toast.error("Failed to confirm record");
     }
   };
 
@@ -167,7 +188,7 @@ export default function App() {
     setIsChatLoading(true);
     setChatResponse("");
     try {
-      const response = await axios.post("https://nknair-hr-intelligence-backend.hf.space/api/chat", {
+      const response = await axios.post("http://127.0.0.1:8000/api/chat", {
         question: chatQuestion,
         data: dashboardData
       });
@@ -198,7 +219,13 @@ export default function App() {
 
   const chartData = Object.values(churnByDepartment);
 
-  const filteredData = dashboardData.filter((row) => {
+  const errorRows = dashboardData.filter(d => d.validation_status === "error");
+  const guessRows = dashboardData.filter(d => d.validation_status === "guess" && !d.is_confirmed);
+  const masterRows = dashboardData
+    .filter(d => !d.validation_status || d.validation_status === "verified" || d.is_confirmed === true)
+    .sort((a, b) => (a.employee_id || "").localeCompare(b.employee_id || "", undefined, { numeric: true }));
+
+  const filteredData = masterRows.filter((row) => {
     const term = searchTerm.toLowerCase();
     return (
       (row.employee_id && row.employee_id.toLowerCase().includes(term)) ||
@@ -260,6 +287,22 @@ export default function App() {
           <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400">
             Automatically process unstructured exit interviews, performance reviews, and HR spreadsheets using OCR and LLMs to generate actionable retention insights.
           </p>
+          {(errorRows.length > 0 || guessRows.length > 0) && (
+            <div className="flex items-center justify-center gap-4 mt-4">
+              {errorRows.length > 0 && (
+                <div className="flex items-center space-x-2 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-4 py-2 rounded-lg border border-red-200 dark:border-red-800">
+                  <XCircle className="w-4 h-4" />
+                  <span className="text-sm font-semibold">{errorRows.length} error{errorRows.length !== 1 ? "s" : ""}</span>
+                </div>
+              )}
+              {guessRows.length > 0 && (
+                <div className="flex items-center space-x-2 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 px-4 py-2 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span className="text-sm font-semibold">{guessRows.length} guess{guessRows.length !== 1 ? "es" : ""} made</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 mb-6 sm:mb-8">
@@ -439,6 +482,160 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {errorRows.length > 0 && (
+          <div className="w-full bg-white dark:bg-slate-800 rounded-xl shadow-sm border-2 border-red-400 dark:border-red-600 overflow-hidden mb-6 sm:mb-8">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/20">
+              <h3 className="text-lg font-semibold text-red-700 dark:text-red-400">❌ Critical: Missing IDs</h3>
+              <span className="text-xs font-medium text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-2.5 py-1 rounded-md">
+                {errorRows.length} records
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left text-slate-600 dark:text-slate-300">
+                <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-red-50 dark:bg-red-900/10 border-b border-red-200 dark:border-red-800">
+                  <tr>
+                    <th className="px-4 sm:px-6 py-3 font-semibold">Employee ID</th>
+                    <th className="px-4 sm:px-6 py-3 font-semibold">Department</th>
+                    <th className="px-4 sm:px-6 py-3 font-semibold">Exit Reason</th>
+                    <th className="px-4 sm:px-6 py-3 font-semibold">Salary</th>
+                    <th className="px-4 sm:px-6 py-3 font-semibold text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-red-100 dark:divide-red-900/30">
+                  {errorRows.map((row) => (
+                    <tr key={row.id} className="hover:bg-red-50/50 dark:hover:bg-red-900/10 transition-colors">
+                      <td className="px-4 sm:px-6 py-3">
+                        <div className="flex flex-col space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                            {reviewEditId === row.id ? (
+                              <input
+                                type="text"
+                                value={reviewEditValue}
+                                onChange={(e) => setReviewEditValue(e.target.value)}
+                                className="w-32 px-2 py-1 border border-red-300 dark:border-red-600 rounded text-sm focus:outline-none focus:ring-1 focus:ring-red-500 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                                placeholder="Enter ID..."
+                                autoFocus
+                              />
+                            ) : (
+                              <span
+                                className="font-medium text-red-700 dark:text-red-400 cursor-pointer hover:underline"
+                                onClick={() => { setReviewEditId(row.id); setReviewEditValue(row.employee_id || ""); }}
+                              >
+                                {row.employee_id || "MISSING"}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-red-500 dark:text-red-400 ml-6">Error</span>
+                        </div>
+                      </td>
+                      <td className="px-4 sm:px-6 py-3">{row.department || "-"}</td>
+                      <td className="px-4 sm:px-6 py-3">{row.exit_reason || "-"}</td>
+                      <td className="px-4 sm:px-6 py-3">{row.salary != null ? `$${row.salary.toLocaleString()}` : "-"}</td>
+                      <td className="px-4 sm:px-6 py-3 text-center">
+                        <div className="flex items-center justify-center space-x-2">
+                          {reviewEditId !== row.id && (
+                            <button
+                              onClick={() => { setReviewEditId(row.id); setReviewEditValue(row.employee_id || ""); }}
+                              className="px-3 py-1 bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-medium rounded hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleConfirmRecord(row.id, reviewEditId === row.id ? reviewEditValue : row.employee_id)}
+                            disabled={reviewEditId === row.id && !reviewEditValue.trim()}
+                            className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Confirm</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {guessRows.length > 0 && (
+          <div className="w-full bg-white dark:bg-slate-800 rounded-xl shadow-sm border-2 border-yellow-400 dark:border-yellow-600 overflow-hidden mb-6 sm:mb-8">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-yellow-200 dark:border-yellow-800 bg-yellow-50/50 dark:bg-yellow-900/20">
+              <h3 className="text-lg font-semibold text-yellow-700 dark:text-yellow-400">⚠️ Review: AI-Suggested IDs</h3>
+              <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/40 px-2.5 py-1 rounded-md">
+                {guessRows.length} records
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left text-slate-600 dark:text-slate-300">
+                <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-yellow-50 dark:bg-yellow-900/10 border-b border-yellow-200 dark:border-yellow-800">
+                  <tr>
+                    <th className="px-4 sm:px-6 py-3 font-semibold">Employee ID</th>
+                    <th className="px-4 sm:px-6 py-3 font-semibold">Department</th>
+                    <th className="px-4 sm:px-6 py-3 font-semibold">Exit Reason</th>
+                    <th className="px-4 sm:px-6 py-3 font-semibold">Salary</th>
+                    <th className="px-4 sm:px-6 py-3 font-semibold text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-yellow-100 dark:divide-yellow-900/30">
+                  {guessRows.map((row) => (
+                    <tr key={row.id} className="hover:bg-yellow-50/50 dark:hover:bg-yellow-900/10 transition-colors">
+                      <td className="px-4 sm:px-6 py-3">
+                        <div className="flex flex-col space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                            {reviewEditId === row.id ? (
+                              <input
+                                type="text"
+                                value={reviewEditValue}
+                                onChange={(e) => setReviewEditValue(e.target.value)}
+                                className="w-32 px-2 py-1 border border-yellow-300 dark:border-yellow-600 rounded text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                                autoFocus
+                              />
+                            ) : (
+                              <span
+                                className="font-medium text-yellow-700 dark:text-yellow-400 cursor-pointer hover:underline"
+                                onClick={() => { setReviewEditId(row.id); setReviewEditValue(row.employee_id || ""); }}
+                              >
+                                {row.employee_id}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-yellow-500 dark:text-yellow-400 ml-6">Guess</span>
+                        </div>
+                      </td>
+                      <td className="px-4 sm:px-6 py-3">{row.department || "-"}</td>
+                      <td className="px-4 sm:px-6 py-3">{row.exit_reason || "-"}</td>
+                      <td className="px-4 sm:px-6 py-3">{row.salary != null ? `$${row.salary.toLocaleString()}` : "-"}</td>
+                      <td className="px-4 sm:px-6 py-3 text-center">
+                        <div className="flex items-center justify-center space-x-2">
+                          {reviewEditId !== row.id && (
+                            <button
+                              onClick={() => { setReviewEditId(row.id); setReviewEditValue(row.employee_id || ""); }}
+                              className="px-3 py-1 bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-medium rounded hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleConfirmRecord(row.id, reviewEditId === row.id ? reviewEditValue : row.employee_id)}
+                            className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Confirm</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         <div className="w-full bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 sm:p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 gap-2">

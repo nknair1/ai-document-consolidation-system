@@ -6,8 +6,6 @@ class EmployeeChurn(Base):
     __tablename__ = "employee_churn"
 
     id = Column(Integer, primary_key=True, index=True)
-    
-    # Option 5 Final Schema Fields
     employee_id = Column(String, index=True, nullable=False)
     joining_date = Column(Date, nullable=True)
     exit_date = Column(Date, nullable=True)
@@ -16,8 +14,8 @@ class EmployeeChurn(Base):
     salary = Column(Float, nullable=True)
     exit_reason = Column(String, nullable=True)
     churn_flag = Column(Boolean, default=False)
-    
-    # Mandatory Tracking Fields
+    validation_status = Column(String, default="verified")
+    is_confirmed = Column(Boolean, default=True)
     source_file = Column(String, nullable=False)
     upload_timestamp = Column(DateTime(timezone=True), server_default=func.now())
-    processing_status = Column(String, default="PENDING")  # PENDING, COMPLETED, FAILED
+    processing_status = Column(String, default="PENDING")

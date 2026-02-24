@@ -51,6 +51,8 @@ class UpdateRecord(BaseModel):
     department: str = None
     exit_reason: str = None
     salary: float = None
+    validation_status: str = None
+    is_confirmed: bool = None
 
 
 def extract_text(file_content: bytes, filename: str) -> str:
@@ -90,12 +92,23 @@ def extract_text(file_content: bytes, filename: str) -> str:
 
 def process_with_llm(text: str) -> list:
     prompt = """
-    You are a senior HR Data Engineer. Your task is to extract a JSON ARRAY of employees from the text. Even if columns are named differently (e.g., "Pay" instead of "Salary" or "Dept" instead of "Department"), map them semantically to our schema.
+    You are a data recovery assistant. Extract a JSON ARRAY of employees from the text.
 
-    Output ONLY a raw JSON array. Start with [ and end with ]. If you see 13-digit numbers like 1673740800000, these are Unix timestamps; convert them to YYYY-MM-DD. If a salary is a string like "Competitive", return null.
+    CRITICAL RULES FOR employee_id AND validation_status:
+    - validation_status is ONLY about the employee_id column. It has NOTHING to do with other fields like salary, rating, or department.
+    - If a row has an employee_id present in the original data, set validation_status to "verified" NO MATTER WHAT. Even if other fields are missing or weird.
+    - If a row has a BLANK/EMPTY employee_id but you can infer it from a numerical pattern in surrounding rows (e.g., rows have EMP-1001, [blank], EMP-1003, so the blank is EMP-1002), set the guessed ID and set validation_status to "guess".
+    - If a row has a BLANK/EMPTY employee_id and you CANNOT guess it, set employee_id to null and validation_status to "error".
+    - NEVER set a row to "error" or "guess" if the original data already contains an employee_id for that row.
+
+    OTHER RULES:
+    - Even if columns are named differently (e.g., "Pay" instead of "Salary"), map them semantically.
+    - If you see 13-digit numbers like 1673740800000, these are Unix timestamps; convert them to YYYY-MM-DD.
+    - If a salary is a non-numeric string like "Competitive", return null for salary.
+    - Output ONLY a raw JSON array. Start with [ and end with ].
 
     Each object in the array must match this schema:
-    - "employee_id" (string)
+    - "employee_id" (string, or null if missing and unguessable)
     - "joining_date" (string, format YYYY-MM-DD, or null if missing)
     - "exit_date" (string, format YYYY-MM-DD, or null if missing)
     - "department" (string, or null if missing)
@@ -103,6 +116,7 @@ def process_with_llm(text: str) -> list:
     - "salary" (float, or null if missing, strip any currency symbols and commas)
     - "exit_reason" (string, or null if missing)
     - "churn_flag" (boolean, true if the employee has exited, false otherwise)
+    - "validation_status" (string, ONLY about employee_id: "verified" if ID was in the original data, "guess" if you inferred it, "error" if ID is blank and unguessable)
 
     Text to process:
     """ + text
@@ -111,7 +125,7 @@ def process_with_llm(text: str) -> list:
         completion = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": "You are a senior HR Data Engineer. Your task is to extract a JSON ARRAY of employees from the text. Even if columns are named differently, map them semantically to our schema. Output ONLY a raw JSON array. Start with [ and end with ]. Absolutely no conversational text, notes, or explanations before or after the JSON array."},
+                {"role": "system", "content": "You are a data recovery assistant. Extract employees into a JSON array. CRITICAL: validation_status is ONLY about the employee_id column. If a row already has an employee_id in the source data, validation_status MUST be verified, even if other fields like salary or rating are missing. Only set guess if the employee_id was blank and you inferred it from a pattern. Only set error if the employee_id was blank and you could not guess it. Output ONLY a raw JSON array starting with [ and ending with ]. No text before or after."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
@@ -207,15 +221,17 @@ async def upload_files(files: List[UploadFile] = File(...), db: Session = Depend
 
             for emp_data in structured_data:
                 try:
-                    if not emp_data.get("employee_id"):
-                        error_record = models.EmployeeChurn(
-                            employee_id="ERROR",
-                            source_file=file.filename,
-                            processing_status="FAILED",
-                            exit_reason="Missing Employee ID"
-                        )
-                        db.add(error_record)
-                        continue
+                    validation_status = emp_data.get("validation_status", "verified")
+                    is_confirmed = validation_status not in ["error", "guess"]
+
+                    if validation_status == "error":
+                        emp_id = "MISSING"
+                    elif not emp_data.get("employee_id"):
+                        emp_id = "MISSING"
+                        validation_status = "error"
+                        is_confirmed = False
+                    else:
+                        emp_id = str(emp_data.get("employee_id"))
 
                     try:
                         salary = float(str(emp_data.get("salary")).replace("$", "").replace(",", ""))
@@ -223,7 +239,7 @@ async def upload_files(files: List[UploadFile] = File(...), db: Session = Depend
                         salary = None
 
                     db_record = models.EmployeeChurn(
-                        employee_id=str(emp_data.get("employee_id", "UNKNOWN")),
+                        employee_id=emp_id,
                         joining_date=safe_parse_date(emp_data.get("joining_date")),
                         exit_date=safe_parse_date(emp_data.get("exit_date")),
                         department=emp_data.get("department"),
@@ -231,6 +247,8 @@ async def upload_files(files: List[UploadFile] = File(...), db: Session = Depend
                         salary=salary,
                         exit_reason=emp_data.get("exit_reason"),
                         churn_flag=bool(emp_data.get("churn_flag", False)),
+                        validation_status=validation_status,
+                        is_confirmed=is_confirmed,
                         source_file=file.filename,
                         processing_status="COMPLETED"
                     )
@@ -349,6 +367,10 @@ def update_churn_record(record_id: int, update_data: UpdateRecord, db: Session =
         record.exit_reason = update_data.exit_reason
     if update_data.salary is not None:
         record.salary = update_data.salary
+    if update_data.validation_status is not None:
+        record.validation_status = update_data.validation_status
+    if update_data.is_confirmed is not None:
+        record.is_confirmed = update_data.is_confirmed
     db.commit()
     db.refresh(record)
     return {"message": "Record updated successfully", "record_id": record_id}
